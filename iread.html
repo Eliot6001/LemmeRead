@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paste &amp; Read</title>
+<style>
+  :root{
+    --bg:#15151a;
+    --panel:#1d1d24;
+    --fg:#e8e8ee;
+    --muted:#9a9aa6;
+    --border:#31313c;
+    --accent:#7aa2f7;
+    --fs:20px;
+    --lh:1.7;
+    color-scheme: dark;
+  }
+  html[data-theme="light"]{
+    --bg:#f6f6f4;
+    --panel:#ffffff;
+    --fg:#1b1b1f;
+    --muted:#66666f;
+    --border:#dcdce2;
+    --accent:#2f5fd0;
+    color-scheme: light;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; margin:0; }
+  body{
+    background:var(--bg);
+    color:var(--fg);
+    font:13px/1.4 system-ui, sans-serif;
+    display:flex;
+    flex-direction:column;
+  }
+
+  header{
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    gap:8px 14px;
+    padding:8px 12px;
+    background:var(--panel);
+    border-bottom:1px solid var(--border);
+  }
+  header label{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    color:var(--muted);
+    white-space:nowrap;
+  }
+  select, input[type="text"]{
+    background:var(--bg);
+    color:var(--fg);
+    border:1px solid var(--border);
+    border-radius:6px;
+    padding:4px 6px;
+    font:inherit;
+    max-width:230px;
+  }
+  input[type="range"]{ width:100px; accent-color:var(--accent); }
+  button{
+    background:var(--bg);
+    color:var(--fg);
+    border:1px solid var(--border);
+    border-radius:6px;
+    padding:4px 10px;
+    font:inherit;
+    cursor:pointer;
+  }
+  button:hover{ border-color:var(--accent); color:var(--accent); }
+  #status{ color:var(--muted); font-size:11px; }
+
+  main{
+    flex:1;
+    min-height:0;
+    display:grid;
+    grid-template-columns:minmax(200px,280px) 1fr;
+  }
+
+  /* the tiny paste box */
+  #input{
+    width:100%;
+    height:100%;
+    resize:none;
+    border:0;
+    outline:0;
+    padding:10px;
+    background:var(--panel);
+    color:var(--muted);
+    border-right:1px solid var(--border);
+    font:11px/1.45 ui-monospace, "JetBrains Mono", "Fira Code", monospace;
+  }
+  #input:focus{ color:var(--fg); }
+
+  /* the readable view */
+  #preview{
+    overflow:auto;
+    padding:40px 24px 120px;
+    background:var(--bg);
+  }
+  #doc{
+    max-width:70ch;              /* comfortable reading measure */
+    margin:0 auto;
+    white-space:pre-wrap;        /* preserves line breaks + spaces */
+    overflow-wrap:break-word;
+    font-size:var(--fs);
+    line-height:var(--lh);
+  }
+  #doc:empty::before{
+    content:"Paste text into the box on the left…";
+    color:var(--muted);
+  }
+  /* no-wrap mode */
+  #preview.nowrap #doc{
+    white-space:pre;
+    max-width:none;
+    width:max-content;
+    margin:0;
+  }
+
+  @media (max-width:720px){
+    main{ grid-template-columns:1fr; grid-template-rows:130px 1fr; }
+    #input{ border-right:0; border-bottom:1px solid var(--border); }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <label>Font
+    <select id="fontSelect">
+      <option value='system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif'>System UI (default)</option>
+      <option value='Georgia, "Noto Serif", "Liberation Serif", serif'>Georgia / Noto Serif</option>
+      <option value='"Noto Sans", "DejaVu Sans", sans-serif'>Noto Sans / DejaVu Sans</option>
+      <option value='"Noto Serif", "DejaVu Serif", serif'>Noto Serif / DejaVu Serif</option>
+      <option value='"Liberation Sans", Arial, sans-serif'>Liberation Sans</option>
+      <option value='"Liberation Serif", "Times New Roman", serif'>Liberation Serif</option>
+      <option value='Cantarell, "Adwaita Sans", sans-serif'>Cantarell / Adwaita</option>
+      <option value='Inter, "Fira Sans", "Source Sans 3", sans-serif'>Inter / Fira Sans</option>
+      <option value='Ubuntu, "Ubuntu Sans", sans-serif'>Ubuntu</option>
+      <option value='"Atkinson Hyperlegible", sans-serif'>Atkinson Hyperlegible</option>
+      <option value='"JetBrains Mono", "Fira Code", "Cascadia Code", monospace'>JetBrains Mono</option>
+      <option value='"DejaVu Sans Mono", "Noto Sans Mono", monospace'>DejaVu Sans Mono</option>
+      <option value='ui-monospace, Iosevka, Hack, monospace'>Iosevka / Hack</option>
+    </select>
+  </label>
+
+  <button id="loadSysFonts" title="Uses the Local Font Access API (Chromium browsers)">Load system fonts</button>
+
+  <label>Google font
+    <input type="text" id="gfont" size="20" placeholder="Inter — or — @import url(...)">
+  </label>
+  <button id="addGfont">Add</button>
+
+  <label>Size <input type="range" id="sizeRange" min="12" max="48" step="1" value="20"></label>
+  <label>Line height <input type="range" id="lhRange" min="1.2" max="2.4" step="0.05" value="1.7"></label>
+  <label><input type="checkbox" id="wrapBox" checked> Wrap</label>
+
+  <button id="themeBtn">Light</button>
+  <button id="clearBtn">Clear</button>
+  <span id="status"></span>
+</header>
+
+<main>
+  <textarea id="input" spellcheck="false" placeholder="Paste here…"></textarea>
+  <article id="preview"><div id="doc"></div></article>
+</main>
+
+<script>
+(() => {
+  const root    = document.documentElement;
+  const input   = document.getElementById('input');
+  const doc     = document.getElementById('doc');
+  const preview = document.getElementById('preview');
+  const select  = document.getElementById('fontSelect');
+  const status  = document.getElementById('status');
+
+  const baseOptions = select.innerHTML;   // remember the built-in list
+
+  function render(){ doc.textContent = input.value; }
+  input.addEventListener('input', render);
+
+  select.addEventListener('change', () => { doc.style.fontFamily = select.value; });
+
+  document.getElementById('sizeRange').addEventListener('input', e => {
+    root.style.setProperty('--fs', e.target.value + 'px');
+  });
+  document.getElementById('lhRange').addEventListener('input', e => {
+    root.style.setProperty('--lh', e.target.value);
+  });
+  document.getElementById('wrapBox').addEventListener('change', e => {
+    preview.classList.toggle('nowrap', !e.target.checked);
+  });
+
+  const themeBtn = document.getElementById('themeBtn');
+  themeBtn.addEventListener('click', () => {
+    const isLight = root.dataset.theme === 'light';
+    root.dataset.theme = isLight ? 'dark' : 'light';
+    themeBtn.textContent = isLight ? 'Light' : 'Dark';
+  });
+
+  document.getElementById('clearBtn').addEventListener('click', () => {
+    input.value = '';
+    render();
+    input.focus();
+  });
+
+  document.getElementById('loadSysFonts').addEventListener('click', async () => {
+    if (typeof window.queryLocalFonts !== 'function') {
+      status.textContent = 'Not supported here — use Chrome / Chromium / Edge (or type a name under “Google font”).';
+      return;
+    }
+    try {
+      status.textContent = 'Requesting fonts…';
+      const fonts = await window.queryLocalFonts();
+      const families = [...new Set(fonts.map(f => f.family))]
+                       .sort((a, b) => a.localeCompare(b));
+
+      const googleGroup = select.querySelector('optgroup[data-google]'); // keep any Google fonts
+      select.innerHTML = baseOptions;
+
+      const group = document.createElement('optgroup');
+      group.label = `Installed (${families.length})`;
+      for (const fam of families) {
+        const opt = document.createElement('option');
+        opt.value = `"${fam}"`;
+        opt.textContent = fam;
+        group.appendChild(opt);
+      }
+      select.appendChild(group);
+      if (googleGroup) select.appendChild(googleGroup);
+
+      status.textContent = `${families.length} font families loaded.`;
+    } catch (err) {
+      status.textContent = 'Font access denied: ' + err.message;
+    }
+  });
+
+  /* ---------- Google Fonts ---------- */
+  const gInput = document.getElementById('gfont');
+  document.getElementById('addGfont').addEventListener('click', addGoogleFont);
+  gInput.addEventListener('keydown', e => { if (e.key === 'Enter') addGoogleFont(); });
+
+  function familyFromUrl(url){
+    const m = url.match(/[?&]family=([^&:]+)/);
+    return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : null;
+  }
+
+  function addGoogleFont(){
+    const raw = gInput.value.trim();
+    if (!raw) return;
+
+    let url, family;
+    const urlMatch = raw.match(/https?:\/\/[^\s'")]+/);   // works for plain URLs and @import lines
+    if (urlMatch) {
+      url = urlMatch[0];
+      family = familyFromUrl(url);
+    } else {
+      family = raw.replace(/\s+/g, ' ');
+      url = 'https://fonts.googleapis.com/css2?family=' +
+            family.replace(/ /g, '+') + '&display=swap';
+    }
+
+    if (!family) { status.textContent = 'Could not read a font name from that.'; return; }
+
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = url;
+    link.onerror = () => { status.textContent = 'Failed to load ' + family; };
+    document.head.appendChild(link);
+
+    let group = select.querySelector('optgroup[data-google]');
+    if (!group) {
+      group = document.createElement('optgroup');
+      group.label = 'Google Fonts';
+      group.dataset.google = '1';
+      select.appendChild(group);
+    }
+    const opt = document.createElement('option');
+    opt.value = `"${family}"`;
+    opt.textContent = family;
+    group.appendChild(opt);
+
+    select.value = opt.value;
+    doc.style.fontFamily = opt.value;
+    status.textContent = 'Loaded ' + family;
+    gInput.value = '';
+  }
+
+  /* ---------- hint if the browser can't list fonts ---------- */
+  if (typeof window.queryLocalFonts !== 'function') {
+    status.textContent = 'Tip: “Load system fonts” needs a Chromium-based browser.';
+  }
+
+  input.focus();
+})();
+</script>
+</body>
+</html>
